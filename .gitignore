@@ -31,7 +31,10 @@ Gemfile.lock
 
 # python
 /venv
+.venv
 __pycache__
+.ruff_cache
+docs/plans/*
 
 # Log file
 *.log

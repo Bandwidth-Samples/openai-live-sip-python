@@ -1,0 +1,6 @@
+openai==3.16.2
+fastapi
+uvicorn[standard]
+rich
+pydantic
+python-dotenv
