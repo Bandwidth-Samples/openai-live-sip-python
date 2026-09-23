@@ -1,9 +1,5 @@
 # Bandwidth + OpenAI Live SIP Integration - Python
 
-<a href="https://dev.bandwidth.com/docs/voice/integrations/openai/live/sip">
-  <img src="icon.svg" title="Bandwidth OpenAI Live SIP Integration Guide" alt="Bandwidth OpenAI Live SIP Integration Guide"/>
-</a>
-
 ## Table of Contents
 
 * [Description](#description)
@@ -27,7 +23,7 @@ In order to use this integration you need:
 - A publicly accessible server to host your webhook application (e.g., using [ngrok](https://ngrok.com/))
 - [Docker](https://www.docker.com/) (optional)
 
-Your Bandwidth trunk must point to `sip:$PROJECT_ID@sip.openai.com;transport=tls` as the termination destination.
+Your Bandwidth trunk must point to `sip:$PROJECT_ID@sip.api.openai.com;transport=tls` as the termination destination.
 
 ## Environmental Variables
 
@@ -36,7 +32,7 @@ The sample app uses the below environmental variables.
 ```sh
 OPENAI_API_KEY   # Your OpenAI API Key (must have access to the Live API)
 REFER_TO         # The phone number to transfer calls to (E.164 format, e.g. +19195554321)
-LOG_LEVEL        # (optional) The logging level for the application (default: INFO)
+LOG_LEVEL        # The logging level for the application (e.g. INFO, DEBUG)
 LOCAL_PORT       # (optional) The local port for the application (default: 3000)
 ```
 
