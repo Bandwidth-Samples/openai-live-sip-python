@@ -1,75 +1,96 @@
-# Sample App Title
+# Bandwidth + OpenAI Live SIP Integration - Python
 
-<a href="http://dev.bandwidth.com">
-  <img src="https://s3.amazonaws.com/bwdemos/BW-VMP.png" title="Product Quick Start Guide" alt="Product Quick Start Guide"/> <!--src should be image located in repo-->
+<a href="https://dev.bandwidth.com/docs/voice/integrations/openai/live/sip">
+  <img src="icon.svg" title="Bandwidth OpenAI Live SIP Integration Guide" alt="Bandwidth OpenAI Live SIP Integration Guide"/>
 </a>
 
- # Table of Contents
+## Table of Contents
 
 * [Description](#description)
 * [Pre-Requisites](#pre-requisites)
-* [Running the Application](#running-the-application)
 * [Environmental Variables](#environmental-variables)
+* [Running the Application](#running-the-application)
 * [Callback URLs](#callback-urls)
   * [Ngrok](#ngrok)
 
-# Description
+## Description
 
-A short description of your sample app and its capabilities.
+This is a sample application that demonstrates how to use Bandwidth's Programmable Voice API with OpenAI's GPT-Live-1 model via the Live API SIP interface to create a real-time AI-powered voice assistant. Unlike the WebSocket integration, the Live SIP integration uses OpenAI's SIP Connector to handle media directly — your application only needs to handle webhooks and send commands via the sideband.
 
-# Pre-Requisites
+## Pre-Requisites
 
-In order to use the Bandwidth API users need to set up the appropriate application at the [Bandwidth Dashboard](https://dashboard.bandwidth.com/) and create API tokens.
+In order to use this integration you need:
 
-To create an application log into the [Bandwidth Dashboard](https://dashboard.bandwidth.com/) and navigate to the `Applications` tab.  Fill out the **New Application** form selecting the service (Messaging or Voice) that the application will be used for.  All Bandwidth services require publicly accessible Callback URLs, for more information on how to set one up see [Callback URLs](#callback-urls).
+- A Bandwidth Universal Platform account with a Voice Configuration Package and SIP Connector enabled
+- Your OpenAI [Project ID](https://help.openai.com/en/articles/9186755-managing-projects-in-the-api-platform) — used to configure your Bandwidth trunk destination
+- Your OpenAI [API Key](https://platform.openai.com/api-keys)
+- A publicly accessible server to host your webhook application (e.g., using [ngrok](https://ngrok.com/))
+- [Docker](https://www.docker.com/) (optional)
 
-For more information about API credentials see our [Account Credentials](https://dev.bandwidth.com/docs/account/credentials) page.
+Your Bandwidth trunk must point to `sip:$PROJECT_ID@sip.openai.com;transport=tls` as the termination destination.
 
-# Running the Application
-
-To install the required packages for this app, run the command:
-
-```sh
-# package install command here
-```
-
-Use the following command/s to run the application:
-
-```sh
-# start command here
-```
-
-# Environmental Variables
+## Environmental Variables
 
 The sample app uses the below environmental variables.
 
 ```sh
-BW_ACCOUNT_ID                        # Your Bandwidth Account Id
-BW_USERNAME                          # Your Bandwidth API Username
-BW_PASSWORD                          # Your Bandwidth API Password
-BW_NUMBER                            # The Bandwidth phone number involved with this application
-USER_NUMBER                          # The user's phone number involved with this application
-BW_VOICE_APPLICATION_ID              # Your Voice Application Id created in the dashboard
-BW_MESSAGING_APPLICATION_ID          # Your Messaging Application Id created in the dashboard
-BASE_CALLBACK_URL                    # Your public base url to receive Bandwidth Webhooks. No trailing '/'
-LOCAL_PORT                           # The port number you wish to run the sample on
+OPENAI_API_KEY   # Your OpenAI API Key (must have access to the Live API)
+REFER_TO         # The phone number to transfer calls to (E.164 format, e.g. +19195554321)
+LOG_LEVEL        # (optional) The logging level for the application (default: INFO)
+LOCAL_PORT       # (optional) The local port for the application (default: 3000)
 ```
 
-# Callback URLs
+Create a `.env` file in the root of the project:
 
-For a detailed introduction, check out our [Bandwidth Product Specific Callbacks](https://dev.bandwidth.com/docs/messaging/webhooks) page.
+```sh
+OPENAI_API_KEY="your_openai_api_key_here"
+REFER_TO="+19195554321"
+LOG_LEVEL="INFO"
+LOCAL_PORT=3000
+```
 
-Below are the callback paths:
-* **Should follow `/callbacks/{direction}/{service}` conventions**
-* `<add other callbacks>`
+## Running the Application
 
-## Ngrok
+This application is built using Python 3.13. You can use pip to install the required packages, or Docker Compose to run the application.
 
-A simple way to set up a local callback URL for testing is to use the free tool [ngrok](https://ngrok.com/).  
+```sh
+# Using Docker Compose
+docker compose up --build
+```
+
+```sh
+# Using Python
+python -m venv .venv
+source .venv/bin/activate
+cd app
+pip install -r requirements.txt
+python main.py
+```
+
+A successful startup will log:
+
+```sh
+INFO:     Uvicorn running on http://0.0.0.0:3000 (Press CTRL+C to quit)
+INFO:     Application startup complete.
+```
+
+## Callback URLs
+
+Below are the callback paths exposed by this application:
+
+* `/health`
+* `/webhooks/openai/live/transport/inbound` — receives `live.transport.incoming` events from OpenAI
+
+### Ngrok
+
+A simple way to set up a local callback URL for testing is to use the free tool [ngrok](https://ngrok.com/).
+
 After you have downloaded and installed `ngrok` run the following command to open a public tunnel to your port (`$LOCAL_PORT`)
 
 ```sh
 ngrok http $LOCAL_PORT
 ```
 
-You can view your public URL at `http://127.0.0.1:4040` after ngrok is running.  You can also view the status of the tunnel and requests/responses here.
+You can view your public URL at `http://127.0.0.1:4040` after ngrok is running.
+
+Configure your OpenAI project's webhook URL to `https://<your-ngrok-url>/webhooks/openai/live/transport/inbound`.

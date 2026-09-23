@@ -1,0 +1,11 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: ./app/Dockerfile
+    container_name: bandwidth_live_sip_demo
+    ports:
+      - "${LOCAL_PORT:-3000}:${LOCAL_PORT:-3000}"
+    env_file: .env
+    restart: unless-stopped
+    tty: true
