@@ -12,7 +12,7 @@ load_dotenv(Path(__file__).parent.parent / ".env", override=True)
 
 from openai import AsyncOpenAI
 from openai.resources.live.sideband import AsyncSidebandConnection
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response
 from rich.console import Console
 from rich.panel import Panel
 from rich.rule import Rule
@@ -25,6 +25,7 @@ from models.live_transport_incoming import LiveTransportIncoming
 console = Console()
 try:
     OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+    OPENAI_WEBHOOK_SECRET = os.environ["OPENAI_WEBHOOK_SECRET"]
     REFER_TO = os.environ["REFER_TO"]
     LOG_LEVEL = os.environ["LOG_LEVEL"].upper()
     LOCAL_PORT = int(os.environ.get("LOCAL_PORT", 3000))
@@ -32,7 +33,7 @@ except KeyError as e:
     msg = Text(" Missing environment variables! ", style="bold white on red")
     details = f"Required key not set: [yellow]{e.args[0]}[/yellow]\n\n"
     details += "Make sure the following variables are defined:\n"
-    details += "[cyan]OPENAI_API_KEY, REFER_TO, LOG_LEVEL[/cyan]"
+    details += "[cyan]OPENAI_API_KEY, OPENAI_WEBHOOK_SECRET, REFER_TO, LOG_LEVEL[/cyan]"
     console.print(Panel(details, title=msg, expand=False, border_style="red"))
     sys.exit(1)
 
@@ -47,7 +48,7 @@ for name in ["websockets", "asyncio", "urllib3", "uvicorn", "fastapi", "openai",
 logger = logging.getLogger(__name__)
 
 # OpenAI Live Client
-openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY, webhook_secret=OPENAI_WEBHOOK_SECRET)
 
 # OpenAI Live API Settings
 OPENAI_LIVE_MODEL = "gpt-live-1"
@@ -254,6 +255,7 @@ async def handle_tool_call(
             logger.info(f"Referring session {session_id} to {target_uri}")
             try:
                 await openai_client.live.sessions.refer(session_id, target_uri=target_uri)
+                # "success" means the REFER request was accepted — not that the destination answered.
                 logger.info("Refer accepted by OpenAI — waiting for session.closed")
                 result = "success"
             except Exception as e:
@@ -268,6 +270,8 @@ async def handle_tool_call(
         "call_id": tool_call_id,
         "output": result,
     })
+    # ponytail: pattern assumes one function call per delegation; extend to accumulate
+    # results before response.create() if multi-tool delegations are added.
     await connection.response.create()
 
 
@@ -281,12 +285,21 @@ def health():
 
 
 @app.post("/webhooks/openai/live/transport/inbound", status_code=http.HTTPStatus.OK)
-async def handle_inbound_call(event: LiveTransportIncoming) -> Response:
+async def handle_inbound_call(request: Request) -> Response:
     """
     Handle the live.transport.incoming webhook from OpenAI.
+    Verifies the OpenAI webhook signature before processing.
     Accepts the SIP session, configures the AI agent, and starts the sideband listener.
     Must return 200 OK before OpenAI connects the call.
     """
+    payload = await request.body()
+    try:
+        openai_client.webhooks.verify_signature(payload, dict(request.headers))
+    except Exception:
+        logger.warning("Rejected webhook: invalid signature")
+        return Response(status_code=http.HTTPStatus.BAD_REQUEST)
+
+    event = LiveTransportIncoming.model_validate_json(payload)
     if event.type == "live.transport.incoming" and event.data.type == "sip":
         session_id = event.data.session_id
         session_start_times[session_id] = datetime.now()
