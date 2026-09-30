@@ -12,7 +12,6 @@ load_dotenv(Path(__file__).parent.parent / ".env", override=True)
 
 from openai import AsyncOpenAI
 from openai.resources.live.sideband import AsyncSidebandConnection
-from typing import Optional
 from fastapi import FastAPI, Response
 from rich.console import Console
 from rich.panel import Panel
@@ -144,7 +143,7 @@ def _print_call_end(session_id: str) -> None:
     console.print(Panel(body, title="[bold red] Call Ended [/bold red]", border_style="dim red"))
 
 
-async def sideband_task(session_id: str, sip_host: Optional[str] = None) -> None:
+async def sideband_task(session_id: str) -> None:
     """
     Connect to the sideband for an active Live SIP session and handle tool calls.
     When the Responses backend invokes the `refer` function, transfer the call.
@@ -155,7 +154,6 @@ async def sideband_task(session_id: str, sip_host: Optional[str] = None) -> None
     started by the Live model itself based on DELEGATION_INSTRUCTIONS.
 
     :param session_id: The Live session ID to attach to
-    :param sip_host: Host from the inbound Contact header, used to build the refer URI
     :return: None
     """
     buf: dict[str, str] = {"input": "", "output": ""}
@@ -188,7 +186,7 @@ async def sideband_task(session_id: str, sip_host: Optional[str] = None) -> None
                         if buf["output"].rstrip().endswith((".", "!", "?", "…")):
                             flush("output")
                     case "response.event":
-                        await handle_response_event(event, connection, session_id, sip_host)
+                        await handle_response_event(event, connection, session_id)
                     case "session.closed":
                         if last_speaker:
                             flush(last_speaker)
@@ -212,7 +210,7 @@ async def sideband_task(session_id: str, sip_host: Optional[str] = None) -> None
 
 
 async def handle_response_event(
-    event, connection: AsyncSidebandConnection, session_id: str, sip_host: Optional[str]
+    event, connection: AsyncSidebandConnection, session_id: str
 ) -> None:
     """
     Handle response.event messages forwarded from the Responses delegation backend.
@@ -221,7 +219,6 @@ async def handle_response_event(
     :param event: The response.event from the Live sideband
     :param connection: The Live sideband connection
     :param session_id: The Live session ID
-    :param sip_host: Host from the inbound Contact header, used to build the refer URI
     :return: None
     """
     backend_event: dict = event.event
@@ -232,11 +229,11 @@ async def handle_response_event(
         name = item.get("name")
         logger.debug(f"response.output_item.done: item_type={item_type}" + (f" name={name}" if name else ""))
         if item_type == "function_call":
-            await handle_tool_call(item, connection, session_id, sip_host)
+            await handle_tool_call(item, connection, session_id)
 
 
 async def handle_tool_call(
-    item: dict, connection: AsyncSidebandConnection, session_id: str, sip_host: Optional[str]
+    item: dict, connection: AsyncSidebandConnection, session_id: str
 ) -> None:
     """
     Handle tool calls from the Responses delegation backend.
@@ -245,7 +242,6 @@ async def handle_tool_call(
     :param item: The function_call item from the Responses backend
     :param connection: The Live sideband connection
     :param session_id: The Live session ID
-    :param sip_host: Host from the inbound Contact header, used to build the refer URI
     :return: None
     """
     function_name = item.get("name")
@@ -254,8 +250,7 @@ async def handle_tool_call(
     result: str
     match function_name:
         case "refer":
-            target_uri = f"sip:{REFER_TO}@{sip_host}" if sip_host else f"tel:{REFER_TO}"
-            logger.debug(f"sip_host={sip_host!r} target_uri={target_uri!r}")
+            target_uri = f"tel:{REFER_TO}"
             logger.info(f"Referring session {session_id} to {target_uri}")
             try:
                 await openai_client.live.sessions.refer(session_id, target_uri=target_uri)
@@ -294,7 +289,6 @@ async def handle_inbound_call(event: LiveTransportIncoming) -> Response:
     """
     if event.type == "live.transport.incoming" and event.data.type == "sip":
         session_id = event.data.session_id
-        sip_host = event.data.get_sip_host()
         session_start_times[session_id] = datetime.now()
         _print_call_start(session_id)
         logger.info(f"Received inbound call event for session ID: {session_id}")
@@ -318,7 +312,7 @@ async def handle_inbound_call(event: LiveTransportIncoming) -> Response:
                 },
             },
         )
-        asyncio.create_task(sideband_task(session_id, sip_host))
+        asyncio.create_task(sideband_task(session_id))
     else:
         logger.debug(f"Ignoring event type: {event.type}")
 
