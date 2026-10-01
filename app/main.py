@@ -25,7 +25,6 @@ from models.live_transport_incoming import LiveTransportIncoming
 console = Console()
 try:
     OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
-    OPENAI_WEBHOOK_SECRET = os.environ["OPENAI_WEBHOOK_SECRET"]
     REFER_TO = os.environ["REFER_TO"]
     LOG_LEVEL = os.environ["LOG_LEVEL"].upper()
     LOCAL_PORT = int(os.environ.get("LOCAL_PORT", 3000))
@@ -33,7 +32,7 @@ except KeyError as e:
     msg = Text(" Missing environment variables! ", style="bold white on red")
     details = f"Required key not set: [yellow]{e.args[0]}[/yellow]\n\n"
     details += "Make sure the following variables are defined:\n"
-    details += "[cyan]OPENAI_API_KEY, OPENAI_WEBHOOK_SECRET, REFER_TO, LOG_LEVEL[/cyan]"
+    details += "[cyan]OPENAI_API_KEY, REFER_TO, LOG_LEVEL[/cyan]"
     console.print(Panel(details, title=msg, expand=False, border_style="red"))
     sys.exit(1)
 
@@ -46,6 +45,11 @@ logging.basicConfig(
 for name in ["websockets", "asyncio", "urllib3", "uvicorn", "fastapi", "openai", "httpx", "httpcore2", "httpcore"]:
     logging.getLogger(name).setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Optional: set to verify OpenAI webhook signatures. Recommended in production.
+OPENAI_WEBHOOK_SECRET = os.environ.get("OPENAI_WEBHOOK_SECRET")
+if not OPENAI_WEBHOOK_SECRET:
+    logger.warning("OPENAI_WEBHOOK_SECRET not set — webhook signature verification is disabled")
 
 # OpenAI Live Client
 openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY, webhook_secret=OPENAI_WEBHOOK_SECRET)
@@ -293,11 +297,12 @@ async def handle_inbound_call(request: Request) -> Response:
     Must return 200 OK before OpenAI connects the call.
     """
     payload = await request.body()
-    try:
-        openai_client.webhooks.verify_signature(payload, dict(request.headers))
-    except Exception:
-        logger.warning("Rejected webhook: invalid signature")
-        return Response(status_code=http.HTTPStatus.BAD_REQUEST)
+    if OPENAI_WEBHOOK_SECRET:
+        try:
+            openai_client.webhooks.verify_signature(payload, dict(request.headers))
+        except Exception:
+            logger.warning("Rejected webhook: invalid signature")
+            return Response(status_code=http.HTTPStatus.BAD_REQUEST)
 
     event = LiveTransportIncoming.model_validate_json(payload)
     if event.type == "live.transport.incoming" and event.data.type == "sip":

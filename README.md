@@ -31,7 +31,7 @@ The sample app uses the below environmental variables.
 
 ```sh
 OPENAI_API_KEY        # Your OpenAI API Key (must have access to the Live API)
-OPENAI_WEBHOOK_SECRET # Your OpenAI webhook signing secret (from your project settings)
+OPENAI_WEBHOOK_SECRET # (optional) Webhook signing secret — enables signature verification (recommended in production)
 REFER_TO              # The phone number to transfer calls to (E.164 format, e.g. +19195554321)
 LOG_LEVEL             # The logging level for the application (e.g. INFO, DEBUG)
 LOCAL_PORT            # (optional) The local port for the application (default: 3000)
