@@ -11,7 +11,7 @@
 
 ## Description
 
-This is a sample application that demonstrates how to use Bandwidth's Programmable Voice API with OpenAI's GPT-Live-1 model via the Live API SIP interface to create a real-time AI-powered voice assistant. Unlike the WebSocket integration, the Live SIP integration uses OpenAI's SIP Connector to handle media directly — your application only needs to handle webhooks and send commands via the sideband.
+This is a sample application that demonstrates how to use Bandwidth's Universal Platform with OpenAI's GPT-Live-1 model via the Live API SIP Connector to create a real-time AI-powered voice assistant. Unlike the WebSocket integration, the Live SIP integration uses OpenAI's SIP Connector to handle media directly — your application only needs to handle webhooks and send commands via the sideband.
 
 ## Pre-Requisites
 
@@ -30,16 +30,18 @@ Your Bandwidth trunk must point to `sip:$PROJECT_ID@sip.api.openai.com;transport
 The sample app uses the below environmental variables.
 
 ```sh
-OPENAI_API_KEY   # Your OpenAI API Key (must have access to the Live API)
-REFER_TO         # The phone number to transfer calls to (E.164 format, e.g. +19195554321)
-LOG_LEVEL        # The logging level for the application (e.g. INFO, DEBUG)
-LOCAL_PORT       # (optional) The local port for the application (default: 3000)
+OPENAI_API_KEY        # Your OpenAI API Key (must have access to the Live API)
+OPENAI_WEBHOOK_SECRET # (optional) Webhook signing secret — enables signature verification (recommended in production)
+REFER_TO              # The phone number to transfer calls to (E.164 format, e.g. +19195554321)
+LOG_LEVEL             # The logging level for the application (e.g. INFO, DEBUG)
+LOCAL_PORT            # (optional) The local port for the application (default: 3000)
 ```
 
 Create a `.env` file in the root of the project:
 
 ```sh
 OPENAI_API_KEY="your_openai_api_key_here"
+OPENAI_WEBHOOK_SECRET="whsec_..."
 REFER_TO="+19195554321"
 LOG_LEVEL="INFO"
 LOCAL_PORT=3000

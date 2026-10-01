@@ -12,7 +12,7 @@ load_dotenv(Path(__file__).parent.parent / ".env", override=True)
 
 from openai import AsyncOpenAI
 from openai.resources.live.sideband import AsyncSidebandConnection
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response
 from rich.console import Console
 from rich.panel import Panel
 from rich.rule import Rule
@@ -46,8 +46,13 @@ for name in ["websockets", "asyncio", "urllib3", "uvicorn", "fastapi", "openai",
     logging.getLogger(name).setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Optional: set to verify OpenAI webhook signatures. Recommended in production.
+OPENAI_WEBHOOK_SECRET = os.environ.get("OPENAI_WEBHOOK_SECRET")
+if not OPENAI_WEBHOOK_SECRET:
+    logger.warning("OPENAI_WEBHOOK_SECRET not set — webhook signature verification is disabled")
+
 # OpenAI Live Client
-openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY, webhook_secret=OPENAI_WEBHOOK_SECRET)
 
 # OpenAI Live API Settings
 OPENAI_LIVE_MODEL = "gpt-live-1"
@@ -101,7 +106,7 @@ TOOLS = [
 app = FastAPI()
 
 # Active Live SIP session start times keyed by session_id
-# ponytail: module-level dict; per-instance storage if multi-worker
+# module-level dict; use per-instance storage if running multiple workers
 session_start_times: dict[str, datetime] = {}
 
 
@@ -254,6 +259,7 @@ async def handle_tool_call(
             logger.info(f"Referring session {session_id} to {target_uri}")
             try:
                 await openai_client.live.sessions.refer(session_id, target_uri=target_uri)
+                # "success" means the REFER request was accepted — not that the destination answered.
                 logger.info("Refer accepted by OpenAI — waiting for session.closed")
                 result = "success"
             except Exception as e:
@@ -268,6 +274,8 @@ async def handle_tool_call(
         "call_id": tool_call_id,
         "output": result,
     })
+    # This pattern assumes one function call per delegation. If multiple tools can be
+    # called in a single delegation, accumulate all results before calling response.create().
     await connection.response.create()
 
 
@@ -281,12 +289,22 @@ def health():
 
 
 @app.post("/webhooks/openai/live/transport/inbound", status_code=http.HTTPStatus.OK)
-async def handle_inbound_call(event: LiveTransportIncoming) -> Response:
+async def handle_inbound_call(request: Request) -> Response:
     """
     Handle the live.transport.incoming webhook from OpenAI.
+    Verifies the OpenAI webhook signature before processing.
     Accepts the SIP session, configures the AI agent, and starts the sideband listener.
     Must return 200 OK before OpenAI connects the call.
     """
+    payload = await request.body()
+    if OPENAI_WEBHOOK_SECRET:
+        try:
+            openai_client.webhooks.verify_signature(payload, dict(request.headers))
+        except Exception:
+            logger.warning("Rejected webhook: invalid signature")
+            return Response(status_code=http.HTTPStatus.BAD_REQUEST)
+
+    event = LiveTransportIncoming.model_validate_json(payload)
     if event.type == "live.transport.incoming" and event.data.type == "sip":
         session_id = event.data.session_id
         session_start_times[session_id] = datetime.now()
