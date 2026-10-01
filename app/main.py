@@ -106,7 +106,7 @@ TOOLS = [
 app = FastAPI()
 
 # Active Live SIP session start times keyed by session_id
-# ponytail: module-level dict; per-instance storage if multi-worker
+# module-level dict; use per-instance storage if running multiple workers
 session_start_times: dict[str, datetime] = {}
 
 
@@ -274,8 +274,8 @@ async def handle_tool_call(
         "call_id": tool_call_id,
         "output": result,
     })
-    # ponytail: pattern assumes one function call per delegation; extend to accumulate
-    # results before response.create() if multi-tool delegations are added.
+    # This pattern assumes one function call per delegation. If multiple tools can be
+    # called in a single delegation, accumulate all results before calling response.create().
     await connection.response.create()
 
 
